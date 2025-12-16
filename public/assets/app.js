@@ -1,0 +1,387 @@
+const sections = document.querySelectorAll(".section");
+const navButtons = document.querySelectorAll(".sidebar button");
+const modal = document.getElementById("modal");
+const modalForm = document.getElementById("modal-form");
+const modalTitle = document.getElementById("modal-title");
+
+const apiBase = location.pathname.includes("/public")
+  ? "../api"
+  : "/api";
+const api = {
+  dashboard: `${apiBase}/dashboard.php`,
+  employees: `${apiBase}/employees.php`,
+  attendance: `${apiBase}/attendance.php`,
+  settings: `${apiBase}/settings.php`,
+};
+
+// Navigation
+navButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    navButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    sections.forEach((s) => s.classList.remove("active"));
+    document.getElementById(btn.dataset.section).classList.add("active");
+  });
+});
+
+// Helpers
+const showModal = (title, formHtml, onSubmit) => {
+  modalTitle.textContent = title;
+  modalForm.innerHTML = formHtml;
+  modal.classList.add("show");
+  modalForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(modalForm);
+    await onSubmit(formData);
+    modal.classList.remove("show");
+  };
+};
+document.getElementById("modal-close").onclick = () =>
+  modal.classList.remove("show");
+modal.addEventListener("click", (e) => {
+  if (e.target === modal) modal.classList.remove("show");
+});
+
+const formatTime = (t) => (t ? t.slice(0, 5) : "-");
+const statusBadge = (status) => {
+  if (!status) return `<span class="badge gray">-</span>`;
+  const lower = status.toLowerCase();
+  let cls = "gray";
+  if (lower.includes("về sớm")) cls = "danger";
+  else if (lower.includes("muộn")) cls = "warn";
+  else if (lower.includes("đúng giờ")) cls = "success";
+  return `<span class="badge ${cls}">${status}</span>`;
+};
+
+// Dashboard
+async function loadDashboard() {
+  const res = await fetch(api.dashboard);
+  const data = await res.json();
+
+  const cards = [
+    { label: "Tổng nhân viên", value: data.cards.totalEmployees },
+    { label: "Đi làm", value: data.cards.present },
+    { label: "Đi muộn", value: data.cards.late },
+    { label: "Nghỉ", value: data.cards.absent },
+  ];
+
+  document.getElementById("stats-cards").innerHTML = cards
+    .map(
+      (c) => `
+      <div class="card">
+        <div class="label">${c.label}</div>
+        <div class="value">${c.value}</div>
+      </div>`
+    )
+    .join("");
+
+  document.getElementById("today-logs").innerHTML = data.todayLogs
+    .map(
+      (row) => `
+      <tr>
+        <td>${row.full_name}</td>
+        <td>${row.department || "-"}</td>
+        <td>${row.shift_name || "-"}</td>
+        <td>${formatTime(row.check_in)}</td>
+        <td>${formatTime(row.check_out)}</td>
+        <td>${statusBadge(row.status)}</td>
+      </tr>`
+    )
+    .join("");
+}
+
+// Employees
+async function loadEmployees() {
+  const res = await fetch(api.employees);
+  const rows = await res.json();
+  document.getElementById("employee-rows").innerHTML = rows
+    .map(
+      (r) => `
+    <tr>
+      <td>${r.fingerprint_id}</td>
+      <td>${r.full_name}</td>
+      <td>${r.department}</td>
+      <td>${r.position}</td>
+      <td>${r.birth_year || "-"}</td>
+      <td>${r.created_at || "-"}</td>
+      <td style="display:flex; gap:6px">
+        <button class="ghost" data-edit="${r.id}">Sửa</button>
+        <button class="danger ghost" data-del="${r.id}">Xóa</button>
+      </td>
+    </tr>`
+    )
+    .join("");
+
+  document.querySelectorAll("[data-edit]").forEach((btn) =>
+    btn.addEventListener("click", () => openEditEmployee(btn.dataset.edit))
+  );
+  document.querySelectorAll("[data-del]").forEach((btn) =>
+    btn.addEventListener("click", () => deleteEmployee(btn.dataset.del))
+  );
+}
+
+document
+  .getElementById("btn-add-employee")
+  .addEventListener("click", () => openCompleteFingerprintEmployee());
+
+// Giao diện điền thông tin cho ID vân tay mới được ESP32 gửi lên
+async function openCompleteFingerprintEmployee() {
+  // Lấy danh sách "nhân viên mới" (department = 'Chờ cập nhật')
+  const res = await fetch(`${api.employees}?pending=1`);
+  const pending = await res.json();
+
+  if (!pending.length) {
+    alert("Hiện không có ID vân tay mới nào cần hoàn thiện.");
+    return;
+  }
+
+  const options = pending
+    .map(
+      (p, idx) =>
+        `<option value="${p.id}" ${idx === 0 ? "selected" : ""}>ID ${p.fingerprint_id} - ${p.full_name}</option>`
+    )
+    .join("");
+
+  // Dùng bản ghi đầu tiên làm mặc định
+  let current = pending[0];
+
+  const buildForm = (emp) => `
+    <input type="hidden" name="id" value="${emp.id}" />
+    <label>ID vân tay (không thể sửa)
+      <input value="${emp.fingerprint_id}" disabled />
+    </label>
+    <label>Chọn ID vân tay mới
+      <select name="select_pending" id="pending-select">
+        ${options}
+      </select>
+    </label>
+    <label>Họ tên
+      <input name="full_name" required value="${emp.full_name.replace(
+        /"/g,
+        "&quot;"
+      )}" />
+    </label>
+    <label>Phòng ban
+      <input name="department" required value="${
+        emp.department === "Chờ cập nhật" ? "" : emp.department
+      }" />
+    </label>
+    <label>Chức vụ
+      <input name="position" required value="${emp.position || ""}" />
+    </label>
+    <label>Năm sinh
+      <input name="birth_year" type="number" value="${emp.birth_year || ""}" />
+    </label>
+    <div class="form-actions">
+      <button type="submit">Lưu</button>
+    </div>`;
+
+  showModal("Hoàn thiện thông tin vân tay mới", buildForm(current), async (fd) => {
+    // Lấy ID thật sự từ hidden input, tuyệt đối không cho sửa fingerprint_id
+    const payload = {
+      id: fd.get("id"),
+      full_name: fd.get("full_name"),
+      department: fd.get("department"),
+      position: fd.get("position"),
+      birth_year: fd.get("birth_year"),
+    };
+
+    const resUpdate = await fetch(api.employees, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!resUpdate.ok) {
+      alert("Không thể lưu thông tin: " + (await resUpdate.text()));
+      return;
+    }
+    await loadEmployees();
+    await loadDashboard();
+  });
+
+  // Sau khi modal render, gắn sự kiện đổi option để load đúng nhân viên pending
+  const selectEl = document.getElementById("pending-select");
+  if (selectEl) {
+    selectEl.addEventListener("change", (e) => {
+      const id = e.target.value;
+      const emp = pending.find((p) => p.id == id);
+      if (!emp) return;
+      modalForm.innerHTML = buildForm(emp);
+    });
+  }
+}
+
+async function openEditEmployee(id) {
+  const res = await fetch(api.employees);
+  const rows = await res.json();
+  const emp = rows.find((r) => r.id === id || r.id == id);
+  if (!emp) return;
+  showModal(
+    "Cập nhật nhân viên",
+    `
+    <input type="hidden" name="id" value="${emp.id}" />
+    <label>Fingerprint ID (không sửa được)
+      <input value="${emp.fingerprint_id}" disabled />
+    </label>
+    <label>Họ tên
+      <input name="full_name" required value="${emp.full_name}" />
+    </label>
+    <label>Phòng ban
+      <input name="department" required value="${emp.department}" />
+    </label>
+    <label>Chức vụ
+      <input name="position" required value="${emp.position}" />
+    </label>
+    <label>Năm sinh
+      <input name="birth_year" type="number" value="${emp.birth_year || ""}" />
+    </label>
+    <div class="form-actions">
+      <button type="submit">Lưu</button>
+    </div>`,
+    async (formData) => {
+      const payload = Object.fromEntries(formData.entries());
+      const resUpdate = await fetch(api.employees, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resUpdate.ok) alert("Không thể cập nhật: " + (await resUpdate.text()));
+      await loadEmployees();
+      await loadDashboard();
+    }
+  );
+}
+
+async function deleteEmployee(id) {
+  if (!confirm("Xóa nhân viên này?")) return;
+  const res = await fetch(api.employees, {
+    method: "DELETE",
+    body: `id=${encodeURIComponent(id)}`,
+  });
+  if (!res.ok) alert("Không thể xóa");
+  await loadEmployees();
+  await loadDashboard();
+}
+
+// Logs
+async function loadLogs() {
+  const name = document.getElementById("filter-name").value;
+  const date = document.getElementById("filter-date").value;
+  const params = new URLSearchParams();
+  if (name) params.append("name", name);
+  if (date) params.append("date", date);
+  const res = await fetch(`${api.attendance}?${params.toString()}`);
+  const rows = await res.json();
+  document.getElementById("log-rows").innerHTML = rows
+    .map(
+      (r) => `
+    <tr>
+      <td>${r.full_name}</td>
+      <td>${r.department}</td>
+      <td>${r.date}</td>
+      <td>${formatTime(r.check_in)}</td>
+      <td>${formatTime(r.check_out)}</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`
+    )
+    .join("");
+}
+document.getElementById("btn-filter").addEventListener("click", loadLogs);
+document.getElementById("btn-export").addEventListener("click", () => {
+  const name = document.getElementById("filter-name").value;
+  const date = document.getElementById("filter-date").value;
+  const params = new URLSearchParams({ export: 1 });
+  if (name) params.append("name", name);
+  if (date) params.append("date", date);
+  window.location = `${api.attendance}?${params.toString()}`;
+});
+
+// Settings / shifts
+async function loadShifts() {
+  const res = await fetch(api.settings);
+  const rows = await res.json();
+  document.getElementById("shift-rows").innerHTML = rows
+    .map(
+      (s) => `
+    <tr>
+      <td>${s.shift_name}</td>
+      <td>${s.start_time}</td>
+      <td>${s.end_time}</td>
+      <td style="display:flex; gap:6px">
+        <button class="ghost" data-shift-edit="${s.id}">Sửa</button>
+        <button class="danger ghost" data-shift-del="${s.id}">Xóa</button>
+      </td>
+    </tr>`
+    )
+    .join("");
+
+  document.querySelectorAll("[data-shift-edit]").forEach((btn) =>
+    btn.addEventListener("click", () => openEditShift(btn.dataset.shiftEdit))
+  );
+  document.querySelectorAll("[data-shift-del]").forEach((btn) =>
+    btn.addEventListener("click", () => deleteShift(btn.dataset.shiftDel))
+  );
+}
+document.getElementById("btn-add-shift").addEventListener("click", () =>
+  openShiftModal()
+);
+
+function openShiftModal(shift) {
+  const isEdit = Boolean(shift);
+  showModal(
+    isEdit ? "Sửa ca" : "Thêm ca",
+    `
+    ${isEdit ? `<input type="hidden" name="id" value="${shift.id}" />` : ""}
+    <label>Tên ca
+      <input name="shift_name" required value="${shift?.shift_name || ""}" />
+    </label>
+    <label>Giờ vào
+      <input name="start_time" type="time" required value="${shift?.start_time || ""}" />
+    </label>
+    <label>Giờ ra
+      <input name="end_time" type="time" required value="${shift?.end_time || ""}" />
+    </label>
+    <div class="form-actions">
+      <button type="submit">Lưu</button>
+    </div>`,
+    async (formData) => {
+      const payload = Object.fromEntries(formData.entries());
+      const method = isEdit ? "PUT" : "POST";
+      const res = await fetch(api.settings, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) alert("Không thể lưu ca.");
+      await loadShifts();
+    }
+  );
+}
+
+async function openEditShift(id) {
+  const res = await fetch(api.settings);
+  const rows = await res.json();
+  const shift = rows.find((s) => s.id == id);
+  if (shift) openShiftModal(shift);
+}
+
+async function deleteShift(id) {
+  if (!confirm("Xóa ca này?")) return;
+  const res = await fetch(api.settings, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) {
+    alert("Không thể xóa ca.");
+    return;
+  }
+  await loadShifts();
+}
+
+// Initial load
+loadDashboard();
+loadEmployees();
+loadLogs();
+loadShifts();
+
