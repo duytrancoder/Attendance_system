@@ -1,5 +1,7 @@
 <?php
 // Simple admin UI for attendance management
+require_once __DIR__ . '/../includes/auth.php';
+require_login();
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -18,6 +20,9 @@
             <button data-section="logs">Lịch sử</button>
             <button data-section="settings">Cấu hình</button>
         </nav>
+        <div style="margin-top: auto; padding-top: 24px;">
+            <a href="logout.php" style="display: block; padding: 12px 14px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; color: #ef4444; text-align: center; text-decoration: none; font-size: 14px; transition: all 0.2s ease; font-weight: 500;">Đăng xuất</a>
+        </div>
     </aside>
 
     <main>
