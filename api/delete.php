@@ -12,7 +12,6 @@ if (isset($_GET['all']) && $_GET['all'] == 'true') {
     // Nếu chưa set cascade, cậu bỏ comment dòng dưới:
     // $pdo->exec("DELETE FROM attendance"); 
     
-    // Reset lại ID tự tăng (tùy chọn)
     $pdo->exec("ALTER TABLE employees AUTO_INCREMENT = 1");
     
     json_response(['message' => 'Da xoa toan bo du lieu']);

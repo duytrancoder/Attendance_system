@@ -11,10 +11,12 @@ if ($method !== 'GET') {
     json_response(['error' => 'Method not allowed'], 405);
 }
 
+// Lấy các tham số filter
 $name = isset($_GET['name']) ? '%' . sanitize_string($_GET['name']) . '%' : null;
 $date = isset($_GET['date']) ? sanitize_string($_GET['date']) : null;
 $export = isset($_GET['export']);
 
+// Xây dựng câu truy vấn
 $query = [
     'SELECT e.full_name,
             e.department,
@@ -41,6 +43,7 @@ if ($date) {
 $query[] = 'ORDER BY a.date DESC, a.check_in DESC';
 $sql = implode(' ', $query);
 
+// Thực thi truy vấn
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
@@ -48,8 +51,14 @@ $rows = $stmt->fetchAll();
 if ($export) {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename=attendance.csv');
+    
+    echo "\xEF\xBB\xBF";
+
     $output = fopen('php://output', 'w');
-    fputcsv($output, ['Tên', 'Phòng ban', 'Ngày', 'Giờ vào', 'Giờ ra', 'Trạng thái']);
+    
+    fputcsv($output, ['Tên', 'Phòng ban', 'Ngày', 'Giờ vào', 'Giờ ra', 'Trạng thái'], ';');
+    
+
     foreach ($rows as $row) {
         fputcsv($output, [
             $row['full_name'],
@@ -58,15 +67,12 @@ if ($export) {
             $row['check_in'],
             $row['check_out'],
             $row['status'],
-        ]);
+        ], ';'); 
     }
+    
     fclose($output);
     exit;
 }
 
 json_response($rows);
-
-
-
-
-
+?>
