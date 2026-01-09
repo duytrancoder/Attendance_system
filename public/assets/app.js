@@ -10,6 +10,7 @@ const apiBase = location.pathname.includes("/public")
 const api = {
   dashboard: `${apiBase}/dashboard.php`,
   employees: `${apiBase}/employees.php`,
+  departments: `${apiBase}/departments.php`,
   attendance: `${apiBase}/attendance.php`,
   settings: `${apiBase}/settings.php`,
 };
@@ -142,6 +143,20 @@ async function openCompleteFingerprintEmployee() {
     )
     .join("");
 
+  // Load Departments for Dropdown
+  const resDept = await fetch(api.departments);
+  const departments = await resDept.json();
+  const deptOptions = departments
+    .map(d => `<option value="${d.name}">${d.name}</option>`)
+    .join("");
+  const deptSelect = (currentVal) => `
+    <select name="department" required>
+        <option value="">-- Chọn phòng ban --</option>
+        ${deptOptions}
+        <option value="${currentVal}" ${departments.some(d => d.name === currentVal) ? '' : 'selected'}>${currentVal} (Lưu ý: Chưa có trong danh sách)</option>
+    </select>
+  `;
+
   // Dùng bản ghi đầu tiên làm mặc định
   let current = pending[0];
 
@@ -157,14 +172,15 @@ async function openCompleteFingerprintEmployee() {
     </label>
     <label>Họ tên
       <input name="full_name" required value="${emp.full_name.replace(
-        /"/g,
-        "&quot;"
-      )}" />
+    /"/g,
+    "&quot;"
+  )}" />
     </label>
     <label>Phòng ban
-      <input name="department" required value="${
-        emp.department === "Chờ cập nhật" ? "" : emp.department
-      }" />
+      <select name="department" required>
+           <option value="">-- Chọn --</option>
+           ${deptOptions}
+      </select>
     </label>
     <label>Chức vụ
       <input name="position" required value="${emp.position || ""}" />
@@ -227,7 +243,10 @@ async function openEditEmployee(id) {
       <input name="full_name" required value="${emp.full_name}" />
     </label>
     <label>Phòng ban
-      <input name="department" required value="${emp.department}" />
+      <select name="department" required>
+        ${departments.map(d => `<option value="${d.name}" ${d.name === emp.department ? 'selected' : ''}>${d.name}</option>`).join('')}
+        ${!departments.some(d => d.name === emp.department) ? `<option value="${emp.department}" selected>${emp.department} (Hiện tại)</option>` : ''}
+      </select>
     </label>
     <label>Chức vụ
       <input name="position" required value="${emp.position}" />
@@ -379,9 +398,115 @@ async function deleteShift(id) {
   await loadShifts();
 }
 
+// Departments
+async function loadDepartments() {
+  const res = await fetch(api.departments);
+  const rows = await res.json();
+  document.getElementById("department-rows").innerHTML = rows
+    .map(
+      (d) => `
+      <tr>
+        <td>${d.name}</td>
+        <td>${d.device_code}</td>
+        <td>${d.employee_count}</td>
+        <td style="display:flex; gap:6px">
+          <button class="ghost" onclick="viewDepartmentEmployees('${d.name}')">Xem</button>
+          <button class="ghost" onclick="openEditDepartment('${d.id}')">Sửa</button>
+          <button class="danger ghost" onclick="deleteDepartment('${d.id}')">Xóa</button>
+        </td>
+      </tr>`
+    )
+    .join("");
+}
+
+document.getElementById("btn-add-department").addEventListener("click", () => openDepartmentModal());
+
+function openDepartmentModal(dept) {
+  const isEdit = Boolean(dept);
+  showModal(
+    isEdit ? "Sửa phòng ban" : "Thêm phòng ban",
+    `
+    ${isEdit ? `<input type="hidden" name="id" value="${dept.id}" />` : ""}
+    <label>Tên phòng ban
+      <input name="name" required value="${dept?.name || ""}" />
+    </label>
+    <label>Mã máy (Device Code)
+      <input name="device_code" required value="${dept?.device_code || ""}" placeholder="VD: IT, KETOAN..." />
+      <small>Dùng để map với phần cứng nếu cần</small>
+    </label>
+    <div class="form-actions">
+      <button type="submit">Lưu</button>
+    </div>`,
+    async (formData) => {
+      const payload = Object.fromEntries(formData.entries());
+      const method = isEdit ? "PUT" : "POST";
+      const res = await fetch(api.departments, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert("Lỗi: " + (err.error || "Không thể lưu"));
+        return;
+      }
+      await loadDepartments();
+    }
+  );
+}
+
+async function openEditDepartment(id) {
+  const res = await fetch(api.departments);
+  const rows = await res.json();
+  const dept = rows.find((d) => d.id == id);
+  if (dept) openDepartmentModal(dept);
+}
+
+async function deleteDepartment(id) {
+  if (!confirm("Xóa phòng ban này?")) return;
+  const res = await fetch(api.departments, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    alert("Lỗi: " + (err.error || "Không thể xóa"));
+    return;
+  }
+  await loadDepartments();
+}
+
+async function viewDepartmentEmployees(deptName) {
+  // Switch to details section
+  document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
+  document.getElementById("department-details").classList.add("active");
+
+  document.getElementById("dept-detail-title").textContent = `Chi tiết: ${deptName}`;
+
+  const res = await fetch(`${api.employees}?dept=${encodeURIComponent(deptName)}`);
+  const rows = await res.json();
+
+  document.getElementById("dept-employee-rows").innerHTML = rows.length ? rows
+    .map(
+      (r) => `
+        <tr>
+          <td>${r.fingerprint_id}</td>
+          <td>${r.full_name}</td>
+          <td>${r.position}</td>
+          <td>${r.birth_year || "-"}</td>
+          <td>${r.created_at || "-"}</td>
+        </tr>`
+    )
+    .join("") : '<tr><td colspan="5" style="text-align:center">Chưa có nhân viên</td></tr>';
+}
+
 // Initial load
 loadDashboard();
 loadEmployees();
+loadDepartments(); // Load departments
 loadLogs();
 loadShifts();
+
+
 

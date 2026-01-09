@@ -20,11 +20,22 @@ switch ($method) {
             );
             $stmt->execute(['dept' => 'Chờ cập nhật']);
         } else {
-            $stmt = $pdo->query(
-                'SELECT id, fingerprint_id, full_name, department, position, birth_year, created_at
-                 FROM employees
-                 ORDER BY created_at DESC'
-            );
+            $deptFilter = isset($_GET['dept']) ? $_GET['dept'] : null;
+            if ($deptFilter) {
+                $stmt = $pdo->prepare(
+                    'SELECT id, fingerprint_id, full_name, department, position, birth_year, created_at
+                     FROM employees
+                     WHERE department = :dept
+                     ORDER BY created_at DESC'
+                );
+                $stmt->execute(['dept' => $deptFilter]);
+            } else {
+                $stmt = $pdo->query(
+                    'SELECT id, fingerprint_id, full_name, department, position, birth_year, created_at
+                     FROM employees
+                     ORDER BY created_at DESC'
+                );
+            }
         }
 
         json_response($stmt->fetchAll());

@@ -17,6 +17,7 @@ require_login();
         <nav>
             <button data-section="dashboard" class="active">Dashboard</button>
             <button data-section="employees">Nhân viên</button>
+            <button data-section="departments">Phòng ban</button>
             <button data-section="logs">Lịch sử</button>
             <button data-section="settings">Cấu hình</button>
         </nav>
@@ -83,6 +84,53 @@ require_login();
                             </tr>
                         </thead>
                         <tbody id="employee-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="departments" class="section">
+            <div class="panel">
+                <div class="panel-head">
+                    <h3>Quản lý Phòng ban</h3>
+                    <div>
+                        <button id="btn-add-department">+ Thêm phòng ban</button>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Tên phòng ban</th>
+                                <th>Mã máy (Device Code)</th>
+                                <th>Số lượng NV</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="department-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="department-details" class="section">
+            <div class="panel">
+                <div class="panel-head">
+                    <h3 id="dept-detail-title">Chi tiết phòng ban</h3>
+                    <button class="ghost" onclick="document.querySelector('[data-section=\'departments\']').click()"> Quay lại</button>
+                </div>
+                <div class="table-wrapper">
+                     <table>
+                        <thead>
+                            <tr>
+                                <th>Fingerprint ID</th>
+                                <th>Họ tên</th>
+                                <th>Chức vụ</th>
+                                <th>Năm sinh</th>
+                                <th>Ngày tạo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dept-employee-rows"></tbody>
                     </table>
                 </div>
             </div>
