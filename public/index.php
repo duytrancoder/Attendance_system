@@ -78,7 +78,7 @@ require_login();
                                 <th>Họ tên</th>
                                 <th>Phòng ban</th>
                                 <th>Chức vụ</th>
-                                <th>Năm sinh</th>
+                                <th>Ngày sinh</th>
                                 <th>Ngày tạo</th>
                                 <th></th>
                             </tr>
@@ -126,7 +126,7 @@ require_login();
                                 <th>Fingerprint ID</th>
                                 <th>Họ tên</th>
                                 <th>Chức vụ</th>
-                                <th>Năm sinh</th>
+                                <th>Ngày sinh</th>
                                 <th>Ngày tạo</th>
                             </tr>
                         </thead>

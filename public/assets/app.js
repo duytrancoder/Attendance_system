@@ -15,6 +15,11 @@ const api = {
   settings: `${apiBase}/settings.php`,
 };
 
+// Auto-refresh configuration
+let autoRefreshInterval = null;
+const REFRESH_DELAY = 2000; // 2 seconds (faster updates)
+let currentSection = 'dashboard'; // Track active section
+
 // Navigation
 navButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -22,6 +27,7 @@ navButtons.forEach((btn) => {
     btn.classList.add("active");
     sections.forEach((s) => s.classList.remove("active"));
     document.getElementById(btn.dataset.section).classList.add("active");
+    currentSection = btn.dataset.section; // Track section change
   });
 });
 
@@ -53,6 +59,27 @@ const statusBadge = (status) => {
   else if (lower.includes("đúng giờ")) cls = "success";
   return `<span class="badge ${cls}">${status}</span>`;
 };
+
+// Date Helpers
+const formatDobDisplay = (val) => {
+  if (!val) return "-";
+  // val could be int (19901231) or string "19901231" or "1990"
+  const s = String(val);
+  if (s.length === 8) {
+    return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`;
+  }
+  return s; // Fallback for old data like year only
+};
+
+const formatDobInput = (val) => {
+  if (!val) return "";
+  const s = String(val);
+  if (s.length === 8) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  }
+  return "";
+};
+
 
 // Dashboard
 async function loadDashboard() {
@@ -103,7 +130,7 @@ async function loadEmployees() {
       <td>${r.full_name}</td>
       <td>${r.department}</td>
       <td>${r.position}</td>
-      <td>${r.birth_year || "-"}</td>
+      <td>${formatDobDisplay(r.birth_year)}</td>
       <td>${r.created_at || "-"}</td>
       <td style="display:flex; gap:6px">
         <button class="ghost" data-edit="${r.id}">Sửa</button>
@@ -160,7 +187,31 @@ async function openCompleteFingerprintEmployee() {
   // Dùng bản ghi đầu tiên làm mặc định
   let current = pending[0];
 
-  const buildForm = (emp) => `
+  const buildForm = (emp) => {
+    // Logic kiểm tra và lock Department
+    // emp.department chứa giá trị từ hardware (VD: 'IT', hoặc 'Chờ cập nhật')
+    // departments là danh sách loaded từ JSON (có field device_code)
+
+    let matchedDeptName = "";
+    let isLocked = false;
+    let deptError = "";
+
+    // Tìm xem emp.department có khớp với device_code nào không
+    const match = departments.find(d =>
+      (d.device_code && d.device_code.toUpperCase() === emp.department.toUpperCase())
+    );
+
+    if (match) {
+      matchedDeptName = match.name;
+      isLocked = true;
+    } else {
+      // Nếu emp.department không phải "Chờ cập nhật" mà không tìm thấy match -> Cảnh báo
+      if (emp.department && emp.department !== "Chờ cập nhật") {
+        deptError = `Mã từ thiết bị "${emp.department}" không khớp phòng ban nào!`;
+      }
+    }
+
+    return `
     <input type="hidden" name="id" value="${emp.id}" />
     <label>ID vân tay (không thể sửa)
       <input value="${emp.fingerprint_id}" disabled />
@@ -171,33 +222,39 @@ async function openCompleteFingerprintEmployee() {
       </select>
     </label>
     <label>Họ tên
-      <input name="full_name" required value="${emp.full_name.replace(
-    /"/g,
-    "&quot;"
-  )}" />
+      <input name="full_name" required value="${emp.full_name.replace(/"/g, "&quot;")}" />
     </label>
+    
     <label>Phòng ban
-      <select name="department" required>
+      ${deptError ? `<div style="color:red; font-size:12px; margin-bottom:4px">${deptError}</div>` : ''}
+      <select name="department" required ${isLocked ? "disabled" : ""}>
            <option value="">-- Chọn --</option>
-           ${deptOptions}
+           ${departments.map(d => {
+      const selected = (isLocked && d.name === matchedDeptName) ? "selected" : "";
+      return `<option value="${d.name}" ${selected}>${d.name}</option>`;
+    }).join('')}
+           ${!isLocked && !match ? `<option value="">-- Tự chọn --</option>` : ''}
       </select>
+      ${isLocked ? `<input type="hidden" name="department" value="${matchedDeptName}" /> <small>(Được xác định bởi thiết bị: ${emp.department})</small>` : ""}
     </label>
+    
     <label>Chức vụ
       <input name="position" required value="${emp.position || ""}" />
     </label>
-    <label>Năm sinh
-      <input name="birth_year" type="number" value="${emp.birth_year || ""}" />
+    <label>Ngày sinh
+      <input name="birth_year" type="date" value="${formatDobInput(emp.birth_year)}" />
     </label>
     <div class="form-actions">
       <button type="submit">Lưu</button>
     </div>`;
+  };
 
   showModal("Hoàn thiện thông tin vân tay mới", buildForm(current), async (fd) => {
     // Lấy ID thật sự từ hidden input, tuyệt đối không cho sửa fingerprint_id
     const payload = {
       id: fd.get("id"),
       full_name: fd.get("full_name"),
-      department: fd.get("department"),
+      department: fd.get("department"), // Nếu disabled, input hidden sẽ gửi value
       position: fd.get("position"),
       birth_year: fd.get("birth_year"),
     };
@@ -213,6 +270,7 @@ async function openCompleteFingerprintEmployee() {
     }
     await loadEmployees();
     await loadDashboard();
+    await loadDepartments(); // Auto-update department counts
   });
 
   // Sau khi modal render, gắn sự kiện đổi option để load đúng nhân viên pending
@@ -232,6 +290,11 @@ async function openEditEmployee(id) {
   const rows = await res.json();
   const emp = rows.find((r) => r.id === id || r.id == id);
   if (!emp) return;
+
+  // Load Departments for dropdown
+  const resDept = await fetch(api.departments);
+  const departments = await resDept.json();
+
   showModal(
     "Cập nhật nhân viên",
     `
@@ -242,17 +305,14 @@ async function openEditEmployee(id) {
     <label>Họ tên
       <input name="full_name" required value="${emp.full_name}" />
     </label>
-    <label>Phòng ban
-      <select name="department" required>
-        ${departments.map(d => `<option value="${d.name}" ${d.name === emp.department ? 'selected' : ''}>${d.name}</option>`).join('')}
-        ${!departments.some(d => d.name === emp.department) ? `<option value="${emp.department}" selected>${emp.department} (Hiện tại)</option>` : ''}
-      </select>
+    <label>Phòng ban (không sửa)
+      <input name="department" value="${emp.department}" readonly />
     </label>
     <label>Chức vụ
       <input name="position" required value="${emp.position}" />
     </label>
-    <label>Năm sinh
-      <input name="birth_year" type="number" value="${emp.birth_year || ""}" />
+    <label>Ngày sinh
+      <input name="birth_year" type="date" value="${formatDobInput(emp.birth_year)}" />
     </label>
     <div class="form-actions">
       <button type="submit">Lưu</button>
@@ -267,6 +327,7 @@ async function openEditEmployee(id) {
       if (!resUpdate.ok) alert("Không thể cập nhật: " + (await resUpdate.text()));
       await loadEmployees();
       await loadDashboard();
+      await loadDepartments(); // Auto-update department counts
     }
   );
 }
@@ -280,6 +341,7 @@ async function deleteEmployee(id) {
   if (!res.ok) alert("Không thể xóa");
   await loadEmployees();
   await loadDashboard();
+  await loadDepartments(); // Auto-update department counts
 }
 
 // Logs
@@ -494,7 +556,7 @@ async function viewDepartmentEmployees(deptName) {
           <td>${r.fingerprint_id}</td>
           <td>${r.full_name}</td>
           <td>${r.position}</td>
-          <td>${r.birth_year || "-"}</td>
+          <td>${formatDobDisplay(r.birth_year)}</td>
           <td>${r.created_at || "-"}</td>
         </tr>`
     )
@@ -507,6 +569,45 @@ loadEmployees();
 loadDepartments(); // Load departments
 loadLogs();
 loadShifts();
+
+// Auto-refresh function
+function autoRefresh() {
+  // Don't refresh if modal is open
+  if (modal.classList.contains('show')) return;
+
+  // Only refresh the current active section to reduce server load
+  switch (currentSection) {
+    case 'dashboard':
+      loadDashboard();
+      break;
+    case 'employees':
+      loadEmployees();
+      loadDepartments(); // Also refresh dept counts
+      break;
+    case 'departments':
+      loadDepartments();
+      break;
+    case 'logs':
+      loadLogs();
+      break;
+    case 'settings':
+      loadShifts();
+      break;
+  }
+}
+
+// Start auto-refresh
+autoRefreshInterval = setInterval(autoRefresh, REFRESH_DELAY);
+
+// Stop refresh when page is hidden (user switched tab)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearInterval(autoRefreshInterval);
+  } else {
+    autoRefreshInterval = setInterval(autoRefresh, REFRESH_DELAY);
+    autoRefresh(); // Immediate refresh when returning to tab
+  }
+});
 
 
 

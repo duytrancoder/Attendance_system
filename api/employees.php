@@ -15,10 +15,10 @@ switch ($method) {
             $stmt = $pdo->prepare(
                 'SELECT id, fingerprint_id, full_name, department, position, birth_year, created_at
                  FROM employees
-                 WHERE department = :dept
+                 WHERE full_name LIKE :tempName
                  ORDER BY created_at DESC'
             );
-            $stmt->execute(['dept' => 'Chờ cập nhật']);
+            $stmt->execute(['tempName' => 'Nhân viên mới #%']);
         } else {
             $deptFilter = isset($_GET['dept']) ? $_GET['dept'] : null;
             if ($deptFilter) {
@@ -58,7 +58,7 @@ switch ($method) {
                 'name' => sanitize_string($payload['full_name']),
                 'dept' => sanitize_string($payload['department']),
                 'pos' => sanitize_string($payload['position']),
-                'birth' => isset($payload['birth_year']) ? (int) $payload['birth_year'] : null,
+                'birth' => isset($payload['birth_year']) ? (int) str_replace('-', '', $payload['birth_year']) : null,
             ]);
         } catch (PDOException $e) {
             if ((int) $e->errorInfo[1] === 1062) {
@@ -86,7 +86,7 @@ switch ($method) {
             'name' => sanitize_string($payload['full_name']),
             'dept' => sanitize_string($payload['department']),
             'pos' => sanitize_string($payload['position']),
-            'birth' => isset($payload['birth_year']) ? (int) $payload['birth_year'] : null,
+            'birth' => isset($payload['birth_year']) ? (int) str_replace('-', '', $payload['birth_year']) : null,
             'id' => (int) $payload['id'],
         ]);
 
