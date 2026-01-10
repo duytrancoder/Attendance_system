@@ -1,2 +1,10 @@
 [2026-01-10 12:08:06] Method: GET | GET: {"id":"1"} | POST: [] | Body: 
 [2026-01-10 12:09:15] Method: GET | GET: {"id":"1"} | POST: [] | Body: 
+[2026-01-10 13:24:45] Method: POST | GET: [] | POST: [] | Body: {"id":"23"}
+[2026-01-10 13:24:52] Method: POST | GET: [] | POST: [] | Body: {"id":"22"}
+[2026-01-10 13:25:04] Method: GET | GET: {"all":"true"} | POST: [] | Body: 
+[2026-01-10 13:25:23] Method: GET | GET: {"all":"true"} | POST: [] | Body: 
+[2026-01-10 13:56:42] Method: POST | GET: [] | POST: [] | Body: {"id":"21"}
+[2026-01-10 13:57:04] Method: POST | GET: [] | POST: [] | Body: {"id":"25"}
+[2026-01-10 13:57:14] Method: POST | GET: [] | POST: [] | Body: {"id":"24"}
+[2026-01-10 13:57:40] Method: GET | GET: {"id":"1"} | POST: [] | Body: 

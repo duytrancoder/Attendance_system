@@ -51,6 +51,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['id'])) {
         error_log("Error deleting employee: " . $e->getMessage());
         echo json_encode(['status' => 'ERROR', 'message' => 'Loi: ' . $e->getMessage()]);
     }
+}
+
+// === HANDLE DELETE ALL (GET with all=true) ===
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['all']) && $_GET['all'] === 'true') {
+    $dept = isset($_GET['dept']) ? $_GET['dept'] : '';
+    
+    try {
+        error_log("Arduino DELETE ALL request for dept: $dept");
+        
+        if (empty($dept)) {
+            echo json_encode(['status' => 'ERROR', 'message' => 'Thieu thong tin phong ban']);
+            exit();
+        }
+        
+        // Lấy danh sách employees theo dept (device_code -> department name mapping)
+        $deptName = '';
+        $jsonFile = __DIR__ . '/departments.json';
+        if (file_exists($jsonFile)) {
+            $depts = json_decode(file_get_contents($jsonFile), true) ?: [];
+            foreach ($depts as $d) {
+                if (isset($d['device_code']) && $d['device_code'] === $dept) {
+                    $deptName = $d['name'];
+                    break;
+                }
+            }
+        }
+        
+        // Nếu không tìm thấy mapping, dùng dept code làm tên
+        if (empty($deptName)) {
+            $deptName = $dept;
+        }
+        
+        error_log("Deleting all employees from department: $deptName (code: $dept)");
+        
+        // Xóa tất cả nhân viên của phòng ban này
+        // Bước 1: Xóa attendance
+        $stmtAtt = $pdo->prepare("
+            DELETE a FROM attendance a
+            INNER JOIN employees e ON a.fingerprint_id = e.fingerprint_id
+            WHERE e.department = ?
+        ");
+        $stmtAtt->execute([$deptName]);
+        $attendanceDeleted = $stmtAtt->rowCount();
+        
+        // Bước 2: Xóa employees
+        $stmtEmp = $pdo->prepare("DELETE FROM employees WHERE department = ?");
+        $stmtEmp->execute([$deptName]);
+        $employeesDeleted = $stmtEmp->rowCount();
+        
+        error_log("Deleted $employeesDeleted employees and $attendanceDeleted attendance records");
+        
+        echo json_encode([
+            'status' => 'OK',
+            'message' => 'Da xoa tat ca',
+            'employees_deleted' => $employeesDeleted,
+            'attendance_deleted' => $attendanceDeleted,
+            'department' => $deptName
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Error deleting all employees: " . $e->getMessage());
+        echo json_encode(['status' => 'ERROR', 'message' => 'Loi: ' . $e->getMessage()]);
+    }
     exit();
 }
 
