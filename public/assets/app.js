@@ -11,13 +11,14 @@ const api = {
   dashboard: `${apiBase}/dashboard.php`,
   employees: `${apiBase}/employees.php`,
   departments: `${apiBase}/departments.php`,
+  statistics: `${apiBase}/statistics.php`,
   attendance: `${apiBase}/attendance.php`,
   settings: `${apiBase}/settings.php`,
 };
 
 // Auto-refresh configuration
 let autoRefreshInterval = null;
-const REFRESH_DELAY = 2000; // 2 seconds (faster updates)
+const REFRESH_DELAY = 1000; // 1 second (very fast updates)
 let currentSection = 'dashboard'; // Track active section
 
 // Navigation
@@ -579,6 +580,30 @@ loadEmployees();
 loadDepartments(); // Load departments
 loadLogs();
 loadShifts();
+
+// Initialize statistics filters with default values (current month)
+const today = new Date();
+const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+document.getElementById('stat-start-date').value = firstDay.toISOString().split('T')[0];
+document.getElementById('stat-end-date').value = today.toISOString().split('T')[0];
+
+// Populate department filter
+async function initStatsDepartmentFilter() {
+  const res = await fetch(api.departments);
+  const depts = await res.json();
+  const select = document.getElementById('stat-department');
+  depts.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.name;
+    opt.textContent = d.name;
+    select.appendChild(opt);
+  });
+}
+initStatsDepartmentFilter();
+
+// Statistics event listeners
+document.getElementById('btn-filter-stats').addEventListener('click', loadStatistics);
+document.getElementById('btn-export-stats').addEventListener('click', exportStatisticsExcel);
 
 // Auto-refresh function
 function autoRefresh() {

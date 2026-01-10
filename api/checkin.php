@@ -60,18 +60,30 @@ $log = $stmt->fetch();
 $action = "";
 
 if ($log) {
-    // Đã có bản ghi chưa checkout -> thực hiện Check OUT
+    // Đã có bản ghi chưa checkout -> kiểm tra xem có phải cả 2 lần đều ngoài ca không
     if ($log['check_out']) {
         $action = "DA XONG";
     } else {
-        $isEarlyLeave = $now < $log['end_time'];
-        $status = $log['status'] ?? '';
-        if ($isEarlyLeave && stripos($status, 'Về sớm') === false) {
-            $status = $status ? ($status . ' - Về sớm') : 'Về sớm';
-        }
+        // Kiểm tra: Cả check_in cũ VÀ giờ hiện tại đều NGOÀI ca làm việc?
+        $oldCheckInOutside = ($log['check_in'] < $log['start_time'] || $log['check_in'] > $log['end_time']);
+        $nowOutside = ($now < $log['start_time'] || $now > $log['end_time']);
+        
+        if ($oldCheckInOutside && $nowOutside) {
+            // CẢ 2 LẦN ĐỀU NGOÀI CA -> Cập nhật check_in thay vì check_out
+            // Điều này cho phép chấm lần 3 trong ca sẽ là check_out thực sự
+            $pdo->prepare("UPDATE attendance SET check_in = ? WHERE id = ?")->execute([$now, $log['id']]);
+            $action = "CAP NHAT GIO VAO";
+        } else {
+            // Bình thường: Đây là CHECK OUT
+            $isEarlyLeave = $now < $log['end_time'];
+            $status = $log['status'] ?? '';
+            if ($isEarlyLeave && stripos($status, 'Về sớm') === false) {
+                $status = $status ? ($status . ' - Về sớm') : 'Về sớm';
+            }
 
-        $pdo->prepare("UPDATE attendance SET check_out = ?, status = ? WHERE id = ?")->execute([$now, $status, $log['id']]);
-        $action = "CHECK OUT";
+            $pdo->prepare("UPDATE attendance SET check_out = ?, status = ? WHERE id = ?")->execute([$now, $status, $log['id']]);
+            $action = "CHECK OUT";
+        }
     }
 } else {
     // Không có bản ghi mở -> xác định ca hiện tại/tiếp theo để Check IN

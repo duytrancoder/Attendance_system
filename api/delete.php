@@ -5,6 +5,23 @@ $pdo = db();
 
 header('Content-Type: application/json');
 
+// === HANDLE ARDUINO MANUAL DELETE (GET with fingerprint_id) ===
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['id'])) {
+    $fingerprintId = (int)$_GET['id'];
+    
+    // Delete directly from database using fingerprint_id
+    $stmt = $pdo->prepare("DELETE FROM employees WHERE fingerprint_id = ?");
+    $stmt->execute([$fingerprintId]);
+    
+    if ($stmt->rowCount() > 0) {
+        echo json_encode(['status' => 'success', 'message' => 'Đã xóa nhân viên khỏi hệ thống']);
+    } else {
+        echo json_encode(['status' => 'warning', 'message' => 'Không tìm thấy nhân viên']);
+    }
+    exit();
+}
+
+// === HANDLE WEB DELETE (POST with employee database id) ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'DELETE') {
     // Handle both POST and DELETE methods
     $input = file_get_contents('php://input');

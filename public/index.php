@@ -18,6 +18,7 @@ require_login();
             <button data-section="dashboard" class="active">Dashboard</button>
             <button data-section="employees">Nhân viên</button>
             <button data-section="departments">Phòng ban</button>
+            <button data-section="statistics">Thống Kê</button>
             <button data-section="logs">Lịch sử</button>
             <button data-section="settings">Cấu hình</button>
         </nav>
@@ -132,6 +133,89 @@ require_login();
                         </thead>
                         <tbody id="dept-employee-rows"></tbody>
                     </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="statistics" class="section">
+            <div class="panel">
+                <div class="panel-head">
+                    <h3>Thống Kê Chấm Công</h3>
+                </div>
+                
+                <!-- Overview Cards -->
+                <div class="cards" id="stats-overview">
+                    <div class="card" style="cursor: default;">
+                        <div class="card-label">Tổng số ca</div>
+                        <div class="card-value" id="stat-total-shifts">0</div>
+                    </div>
+                    <div class="card" style="cursor: pointer;" onclick="showTopLateEmployees()">
+                        <div class="card-label">Số lần đi muộn</div>
+                        <div class="card-value danger" id="stat-total-late">0</div>
+                        <small style="opacity: 0.7;">Nhấn để xem danh sách</small>
+                    </div>
+                    <div class="card" style="cursor: pointer;" onclick="showTopEarlyEmployees()">
+                        <div class="card-label">Số lần về sớm</div>
+                        <div class="card-value warn" id="stat-total-early">0</div>
+                        <small style="opacity: 0.7;">Nhấn để xem danh sách</small>
+                    </div>
+                    <div class="card" style="cursor: default;">
+                        <div class="card-label">Nhân viên chuyên cần</div>
+                        <div class="card-value success" style="font-size: 14px;" id="stat-punctual">-</div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="panel" style="margin-top: 20px;">
+                    <div class="panel-head">
+                        <h3>Bộ Lọc</h3>
+                    </div>
+                    <div style="padding: 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+                        <label style="flex: 1; min-width: 150px;">
+                            Từ ngày
+                            <input type="date" id="stat-start-date" />
+                        </label>
+                        <label style="flex: 1; min-width: 150px;">
+                            Đến ngày
+                            <input type="date" id="stat-end-date" />
+                        </label>
+                        <label style="flex: 1; min-width: 150px;">
+                            Phòng ban
+                            <select id="stat-department">
+                                <option value="">Tất cả</option>
+                            </select>
+                        </label>
+                        <label style="flex: 1; min-width: 150px;">
+                            Tìm tên
+                            <input type="text" id="stat-name" placeholder="Nhập tên..." />
+                        </label>
+                        <button id="btn-filter-stats" style="height: 38px;">Lọc</button>
+                        <button id="btn-export-stats" class="ghost" style="height: 38px;">Xuất Excel</button>
+                    </div>
+                </div>
+
+                <!-- Summary Table -->
+                <div class="panel" style="margin-top: 20px;">
+                    <div class="panel-head">
+                        <h3>Bảng Tổng Hợp</h3>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Mã NV</th>
+                                    <th>Họ tên</th>
+                                    <th>Phòng ban</th>
+                                    <th>Tổng ngày công</th>
+                                    <th>Tổng giờ làm</th>
+                                    <th>Số lần muộn</th>
+                                    <th>Tổng phút muộn</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-summary-rows"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
