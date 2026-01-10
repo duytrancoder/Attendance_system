@@ -8,3 +8,12 @@
 [2026-01-10 13:57:04] Method: POST | GET: [] | POST: [] | Body: {"id":"25"}
 [2026-01-10 13:57:14] Method: POST | GET: [] | POST: [] | Body: {"id":"24"}
 [2026-01-10 13:57:40] Method: GET | GET: {"id":"1"} | POST: [] | Body: 
+[2026-01-10 21:56:01] Method: POST | GET: [] | POST: [] | Body: {"id":"27"}
+[2026-01-10 21:56:39] Method: GET | GET: {"id":"1"} | POST: [] | Body: 
+[2026-01-10 22:25:19] Method: POST | GET: [] | POST: [] | Body: {"id":"29"}
+[2026-01-10 22:25:56] Method: GET | GET: {"all":"true","dept":"IT"} | POST: [] | Body: 
+[2026-01-10 22:26:09] Method: GET | GET: {"id":"2"} | POST: [] | Body: 
+[2026-01-10 22:28:14] Method: GET | GET: {"id":"3"} | POST: [] | Body: 
+[2026-01-10 22:28:24] Method: GET | GET: {"all":"true","dept":"IT"} | POST: [] | Body: 
+[2026-01-10 22:36:10] Method: GET | GET: {"id":"2"} | POST: [] | Body: 
+[2026-01-10 22:36:29] Method: POST | GET: [] | POST: [] | Body: {"id":"34"}
