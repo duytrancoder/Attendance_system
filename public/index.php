@@ -284,6 +284,7 @@ require_login();
         </div>
     </div>
 
+    <script src="assets/statistics.js"></script>
     <script src="assets/app.js"></script>
 </body>
 </html>

@@ -536,18 +536,29 @@ async function openEditDepartment(id) {
 }
 
 async function deleteDepartment(id) {
-  if (!confirm("Xóa phòng ban này?")) return;
-  const res = await fetch(api.departments, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    alert("Lỗi: " + (err.error || "Không thể xóa"));
-    return;
+  if (!confirm("Xóa phòng ban này?\n\nChỉ có thể xóa khi số lượng nhân viên = 0")) return;
+
+  try {
+    const res = await fetch(api.departments, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    const result = await res.json();
+
+    if (res.ok) {
+      alert("✅ Đã xóa phòng ban thành công!");
+      await loadDepartments();
+    } else {
+      // Show the exact error from server
+      alert("❌ " + (result.error || "Không thể xóa phòng ban"));
+      console.error("Delete error:", result);
+    }
+  } catch (error) {
+    alert("❌ Lỗi kết nối: " + error.message);
+    console.error("Network error:", error);
   }
-  await loadDepartments();
 }
 
 async function viewDepartmentEmployees(deptName) {

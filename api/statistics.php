@@ -120,11 +120,10 @@ $query = "SELECT
                     )
                 ELSE 0 
             END) as late_minutes
-          FROM employees e
-          LEFT JOIN attendance a ON a.fingerprint_id = e.fingerprint_id 
-            AND a.date BETWEEN :start AND :end
+          FROM attendance a
+          INNER JOIN employees e ON a.fingerprint_id = e.fingerprint_id
           LEFT JOIN shifts s ON s.id = a.shift_id
-          WHERE 1=1";
+          WHERE a.date BETWEEN :start AND :end";
 
 $params = ['start' => $startDate, 'end' => $endDate];
 
@@ -155,7 +154,7 @@ $summary = array_map(function($emp) {
         'total_days' => $emp['total_days'],
         'total_hours' => $totalHours,
         'late_count' => $emp['late_count'],
-        'late_minutes' => $emp['late_minutes'],
+        'late_minutes' => $emp['late_minutes'] ?? 0,
         'early_count' => $emp['early_count'],
         'action' => '' // For user input
     ];

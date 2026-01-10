@@ -89,27 +89,23 @@ switch ($method) {
         break;
 
     case 'DELETE':
-        $payload = read_json_body_or_query(); 
-        // read_json_body_or_query isn't standard in helpers, let's use logic compatible with existing code
-        // Existing delete.php uses query params or json body? 
-        // employees.php uses `parse_str(file_get_contents('php://input'), $payload);` for DELETE.
-        // Let's stick to reading body for DELETE as is common in this project's style or check query manually.
+        // Read input from request body (JSON)
+        $input = file_get_contents('php://input');
+        $payload = json_decode($input, true);
         
-        $payload = [];
-        if (!empty($_GET['id'])) {
-            $payload['id'] = $_GET['id'];
-        } else {
-            $input = file_get_contents('php://input');
-            $json = json_decode($input, true);
-            if (is_array($json)) {
-                $payload = $json;
+        // Fallback to query params if JSON decode fails
+        if (!$payload || !isset($payload['id'])) {
+            $payload = [];
+            if (isset($_GET['id'])) {
+                $payload['id'] = $_GET['id'];
             } else {
-                 parse_str($input, $payload);
+                // Try form-encoded
+                parse_str($input, $payload);
             }
         }
 
         if (empty($payload['id'])) {
-            json_response(['error' => 'Missing id'], 400);
+            json_response(['error' => 'Missing department id'], 400);
         }
 
         $id = $payload['id'];
