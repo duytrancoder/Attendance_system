@@ -5,18 +5,51 @@ $pdo = db();
 
 header('Content-Type: application/json');
 
+// === COMPREHENSIVE LOGGING ===
+$logFile = __DIR__ . '/../delete_requests.log';
+$logEntry = sprintf(
+    "[%s] Method: %s | GET: %s | POST: %s | Body: %s\n",
+    date('Y-m-d H:i:s'),
+    $_SERVER['REQUEST_METHOD'],
+    json_encode($_GET),
+    json_encode($_POST),
+    file_get_contents('php://input')
+);
+file_put_contents($logFile, $logEntry, FILE_APPEND);
+
 // === HANDLE ARDUINO MANUAL DELETE (GET with fingerprint_id) ===
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['id'])) {
     $fingerprintId = (int)$_GET['id'];
     
-    // Delete directly from database using fingerprint_id
-    $stmt = $pdo->prepare("DELETE FROM employees WHERE fingerprint_id = ?");
-    $stmt->execute([$fingerprintId]);
-    
-    if ($stmt->rowCount() > 0) {
-        echo json_encode(['status' => 'success', 'message' => 'Đã xóa nhân viên khỏi hệ thống']);
-    } else {
-        echo json_encode(['status' => 'warning', 'message' => 'Không tìm thấy nhân viên']);
+    try {
+        // Log the delete request
+        error_log("Arduino DELETE request: fingerprint_id = $fingerprintId");
+        
+        // IMPORTANT: Delete attendance records first (no CASCADE in current schema)
+        $stmtAtt = $pdo->prepare("DELETE FROM attendance WHERE fingerprint_id = ?");
+        $stmtAtt->execute([$fingerprintId]);
+        $attendanceDeleted = $stmtAtt->rowCount();
+        error_log("Deleted $attendanceDeleted attendance records for fingerprint_id = $fingerprintId");
+        
+        // Then delete employee
+        $stmt = $pdo->prepare("DELETE FROM employees WHERE fingerprint_id = ?");
+        $stmt->execute([$fingerprintId]);
+        
+        if ($stmt->rowCount() > 0) {
+            error_log("Successfully deleted employee with fingerprint_id = $fingerprintId");
+            echo json_encode([
+                'status' => 'OK',
+                'message' => 'Da xoa',
+                'fingerprint_id' => $fingerprintId,
+                'attendance_deleted' => $attendanceDeleted
+            ]);
+        } else {
+            error_log("Employee with fingerprint_id = $fingerprintId not found");
+            echo json_encode(['status' => 'ERROR', 'message' => 'Khong tim thay']);
+        }
+    } catch (Exception $e) {
+        error_log("Error deleting employee: " . $e->getMessage());
+        echo json_encode(['status' => 'ERROR', 'message' => 'Loi: ' . $e->getMessage()]);
     }
     exit();
 }

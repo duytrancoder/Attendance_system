@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     INDEX idx_fingerprint_date (fingerprint_id, date),
     INDEX idx_date (date),
     INDEX idx_shift (shift_id),
+    FOREIGN KEY (fingerprint_id) REFERENCES employees(fingerprint_id) ON DELETE CASCADE,
     FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
