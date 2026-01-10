@@ -1,29 +1,85 @@
 <?php
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/helpers.php';
-
 $pdo = db();
 
-// 1. Xóa tất cả (Khi chọn Xoa Van Tay -> Xoa TAT CA)
-if (isset($_GET['all']) && $_GET['all'] == 'true') {
-    // Xóa toàn bộ dữ liệu nhân viên và chấm công
-    $pdo->exec("DELETE FROM employees");
-    // Lệnh trên sẽ tự động xóa bảng attendance nếu cậu đã set FOREIGN KEY ON DELETE CASCADE
-    // Nếu chưa set cascade, cậu bỏ comment dòng dưới:
-    // $pdo->exec("DELETE FROM attendance"); 
-    
-    $pdo->exec("ALTER TABLE employees AUTO_INCREMENT = 1");
-    
-    json_response(['message' => 'Da xoa toan bo du lieu']);
-}
+header('Content-Type: application/json');
 
-// 2. Xóa theo ID (Khi chọn Xoa Van Tay -> Xoa theo ID)
-if (isset($_GET['id'])) {
-    $id = (int)$_GET['id'];
-    // Xóa nhân viên có fingerprint_id tương ứng
-    $stmt = $pdo->prepare("DELETE FROM employees WHERE fingerprint_id = ?");
-    $stmt->execute([$id]);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'DELETE') {
+    // Handle both POST and DELETE methods
+    $input = file_get_contents('php://input');
     
-    json_response(['message' => "Da xoa ID $id"]);
+    // Try JSON first, then form-encoded
+    $data = json_decode($input, true);
+    if (!$data) {
+        parse_str($input, $data);
+        if (empty($data)) {
+            $data = $_POST;
+        }
+    }
+    
+    $employeeId = isset($data['id']) ? (int)$data['id'] : 0;
+    
+    if (!$employeeId) {
+        echo json_encode(['status' => 'error', 'message' => 'Missing employee ID']);
+        exit();
+    }
+    
+    // Get employee details (fingerprint_id and department)
+    $stmt = $pdo->prepare("SELECT fingerprint_id, department FROM employees WHERE id = ?");
+    $stmt->execute([$employeeId]);
+    $employee = $stmt->fetch();
+    
+    if (!$employee) {
+        echo json_encode(['status' => 'error', 'message' => 'Employee not found']);
+        exit();
+    }
+    
+    $fingerId = $employee['fingerprint_id'];
+    $deptName = $employee['department'];
+    
+    // CRITICAL: Convert department NAME to device_code
+    $deviceCode = '';
+    $jsonFile = __DIR__ . '/departments.json';
+    if (file_exists($jsonFile)) {
+        $depts = json_decode(file_get_contents($jsonFile), true) ?: [];
+        foreach ($depts as $d) {
+            if (isset($d['name']) && strcasecmp($d['name'], $deptName) === 0) {
+                $deviceCode = $d['device_code'];
+                break;
+            }
+        }
+    }
+    
+    // If no device_code found, use department name as fallback
+    if (empty($deviceCode)) {
+        $deviceCode = $deptName;
+    }
+    
+    // Check if command already exists (prevent duplicates)
+    $check = $pdo->prepare("SELECT id FROM device_commands WHERE device_dept = ? AND data = ? AND status = 'pending'");
+    $check->execute([$deviceCode, $fingerId]);
+    
+    if ($check->rowCount() > 0) {
+        echo json_encode(['status' => 'warning', 'message' => 'Lệnh xóa đang chờ ESP32 xử lý...']);
+        exit();
+    }
+    
+    // Create new delete command in queue using device_code
+    $sql = "INSERT INTO device_commands (device_dept, command, data, status) VALUES (?, 'DELETE', ?, 'pending')";
+    $stmt = $pdo->prepare($sql);
+    
+    if ($stmt->execute([$deviceCode, $fingerId])) {
+        echo json_encode([
+            'status' => 'success', 
+            'message' => 'Đã gửi lệnh xóa xuống thiết bị. Vui lòng chờ đồng bộ...',
+            'fingerprint_id' => $fingerId,
+            'device_code' => $deviceCode
+        ]);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Lỗi database khi tạo lệnh']);
+    }
+} else {
+    echo json_encode(['status' => 'error', 'message' => 'Method not allowed']);
 }
 ?>

@@ -333,15 +333,25 @@ async function openEditEmployee(id) {
 }
 
 async function deleteEmployee(id) {
-  if (!confirm("Xóa nhân viên này?")) return;
-  const res = await fetch(api.employees, {
-    method: "DELETE",
-    body: `id=${encodeURIComponent(id)}`,
+  if (!confirm("Xóa nhân viên này?\n\nLưu ý: Vân tay sẽ được xóa khỏi thiết bị AS608 khi ESP32 đồng bộ (khoảng 5-10 giây).")) return;
+
+  // Call the new delete endpoint
+  const res = await fetch(`${apiBase}/delete.php`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: id }),
   });
-  if (!res.ok) alert("Không thể xóa");
-  await loadEmployees();
-  await loadDashboard();
-  await loadDepartments(); // Auto-update department counts
+
+  const result = await res.json();
+
+  if (result.status === 'success') {
+    alert(result.message + "\n\nNhân viên sẽ biến mất khỏi danh sách sau khi thiết bị xác nhận đã xóa vân tay.");
+    // Don't reload immediately - let auto-refresh handle it after ESP32 confirms
+  } else if (result.status === 'warning') {
+    alert(result.message);
+  } else {
+    alert("Lỗi: " + result.message);
+  }
 }
 
 // Logs
