@@ -20,7 +20,8 @@ if ($topType === 'late') {
               FROM attendance a
               JOIN employees e ON e.fingerprint_id = a.fingerprint_id
               WHERE a.date BETWEEN :start AND :end
-                AND a.status LIKE '%muộn%'";
+                AND a.status LIKE '%muộn%'
+                AND e.deleted_at IS NULL";
     
     $params = ['start' => $startDate, 'end' => $endDate];
     
@@ -44,7 +45,8 @@ if ($topType === 'early') {
               FROM attendance a
               JOIN employees e ON e.fingerprint_id = a.fingerprint_id
               WHERE a.date BETWEEN :start AND :end
-                AND a.status LIKE '%sớm%'";
+                AND a.status LIKE '%sớm%'
+                AND e.deleted_at IS NULL";
     
     $params = ['start' => $startDate, 'end' => $endDate];
     
@@ -91,6 +93,7 @@ $query = "SELECT e.full_name, e.department, COUNT(*) as perfect_days
             AND a.status NOT LIKE '%muộn%'
             AND a.status NOT LIKE '%sớm%'
             AND a.check_out IS NOT NULL
+            AND e.deleted_at IS NULL
           GROUP BY e.id
           ORDER BY perfect_days DESC
           LIMIT 1";
@@ -123,7 +126,8 @@ $query = "SELECT
           FROM attendance a
           INNER JOIN employees e ON a.fingerprint_id = e.fingerprint_id
           LEFT JOIN shifts s ON s.id = a.shift_id
-          WHERE a.date BETWEEN :start AND :end";
+          WHERE a.date BETWEEN :start AND :end
+            AND e.deleted_at IS NULL";
 
 $params = ['start' => $startDate, 'end' => $endDate];
 
