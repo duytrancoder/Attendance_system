@@ -37,3 +37,4 @@
 [2026-01-14 23:52:35] Method: GET | GET: {"id":"1"} | POST: [] | Body: 
 [2026-01-14 23:55:45] Method: POST | GET: [] | POST: [] | Body: {"id":"49"}
 [2026-01-15 00:07:52] Method: POST | GET: [] | POST: [] | Body: {"id":"50"}
+[2026-01-15 00:15:09] Method: GET | GET: {"all":"true","dept":"IT"} | POST: [] | Body: 
