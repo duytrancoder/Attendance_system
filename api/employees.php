@@ -15,7 +15,7 @@ switch ($method) {
             $stmt = $pdo->prepare(
                 'SELECT id, fingerprint_id, full_name, department, position, birth_year, created_at
                  FROM employees
-                 WHERE full_name LIKE :tempName
+                 WHERE full_name LIKE :tempName AND deleted_at IS NULL
                  ORDER BY created_at DESC'
             );
             $stmt->execute(['tempName' => 'Nhân viên mới #%']);
@@ -25,7 +25,7 @@ switch ($method) {
                 $stmt = $pdo->prepare(
                     'SELECT id, fingerprint_id, full_name, department, position, birth_year, created_at
                      FROM employees
-                     WHERE department = :dept
+                     WHERE department = :dept AND deleted_at IS NULL
                      ORDER BY created_at DESC'
                 );
                 $stmt->execute(['dept' => $deptFilter]);
@@ -33,6 +33,7 @@ switch ($method) {
                 $stmt = $pdo->query(
                     'SELECT id, fingerprint_id, full_name, department, position, birth_year, created_at
                      FROM employees
+                     WHERE deleted_at IS NULL
                      ORDER BY created_at DESC'
                 );
             }

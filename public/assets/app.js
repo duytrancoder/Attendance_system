@@ -16,9 +16,16 @@ const api = {
   settings: `${apiBase}/settings.php`,
 };
 
-// Auto-refresh configuration
+// Auto-refresh configuration with optimized intervals per section
 let autoRefreshInterval = null;
-const REFRESH_DELAY = 1000; // 1 second (very fast updates)
+const REFRESH_INTERVALS = {
+  dashboard: 2000,    // 2 seconds - needs real-time updates
+  employees: 2000,    // 2 seconds - REDUCED from 3s to catch new fingerprints faster
+  departments: 5000,  // 5 seconds - less frequent
+  logs: 5000,         // 5 seconds
+  settings: 10000,    // 10 seconds - rarely changes
+  statistics: 0       // No auto-refresh
+};
 let currentSection = 'dashboard'; // Track active section
 
 // Navigation
@@ -28,7 +35,8 @@ navButtons.forEach((btn) => {
     btn.classList.add("active");
     sections.forEach((s) => s.classList.remove("active"));
     document.getElementById(btn.dataset.section).classList.add("active");
-    currentSection = btn.dataset.section; // Track section change
+    currentSection = btn.dataset.section;
+    startAutoRefresh(); // Restart with new interval
   });
 });
 
@@ -334,24 +342,48 @@ async function openEditEmployee(id) {
 }
 
 async function deleteEmployee(id) {
-  if (!confirm("Xóa nhân viên này?\n\nLưu ý: Vân tay sẽ được xóa khỏi thiết bị AS608 khi ESP32 đồng bộ (khoảng 5-10 giây).")) return;
+  if (!confirm("Xóa nhân viên này?\n\nLưu ý: Nhân viên sẽ bị ẩn ngay và vân tay sẽ được xóa khỏi thiết bị AS608 khi ESP32 đồng bộ (5-10 giây).")) return;
 
-  // Call the new delete endpoint
-  const res = await fetch(`${apiBase}/delete.php`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: id }),
-  });
+  const row = document.querySelector(`[data-del="${id}"]`)?.closest('tr');
+  if (row) {
+    row.style.opacity = '0.5';
+    row.style.pointerEvents = 'none';
+  }
 
-  const result = await res.json();
+  try {
+    const res = await fetch(`${apiBase}/delete.php`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id }),
+    });
 
-  if (result.status === 'success') {
-    alert(result.message + "\n\nNhân viên sẽ biến mất khỏi danh sách sau khi thiết bị xác nhận đã xóa vân tay.");
-    // Don't reload immediately - let auto-refresh handle it after ESP32 confirms
-  } else if (result.status === 'warning') {
-    alert(result.message);
-  } else {
-    alert("Lỗi: " + result.message);
+    const result = await res.json();
+
+    if (result.status === 'success') {
+      if (row) row.remove();
+      await loadEmployees();
+      await loadDashboard();
+      await loadDepartments();
+      console.log('✓ ' + result.message);
+    } else if (result.status === 'warning') {
+      alert(result.message);
+      if (row) {
+        row.style.opacity = '1';
+        row.style.pointerEvents = 'auto';
+      }
+    } else {
+      alert("Lỗi: " + result.message);
+      if (row) {
+        row.style.opacity = '1';
+        row.style.pointerEvents = 'auto';
+      }
+    }
+  } catch (error) {
+    alert("Lỗi kết nối: " + error.message);
+    if (row) {
+      row.style.opacity = '1';
+      row.style.pointerEvents = 'auto';
+    }
   }
 }
 
@@ -621,7 +653,13 @@ function autoRefresh() {
   // Don't refresh if modal is open
   if (modal.classList.contains('show')) return;
 
-  // Only refresh the current active section to reduce server load
+  // ALWAYS refresh employees in background to catch new fingerprint registrations
+  // This ensures newly registered fingerprints appear immediately
+  if (currentSection !== 'employees') {
+    loadEmployees().catch(err => console.error('Background employee refresh failed:', err));
+  }
+
+  // Refresh the current active section
   switch (currentSection) {
     case 'dashboard':
       loadDashboard();
@@ -642,15 +680,22 @@ function autoRefresh() {
   }
 }
 
-// Start auto-refresh
-autoRefreshInterval = setInterval(autoRefresh, REFRESH_DELAY);
+// Start auto-refresh with dynamic interval
+function startAutoRefresh() {
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+  const interval = REFRESH_INTERVALS[currentSection] || 5000;
+  if (interval > 0) {
+    autoRefreshInterval = setInterval(autoRefresh, interval);
+  }
+}
+startAutoRefresh();
 
 // Stop refresh when page is hidden (user switched tab)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     clearInterval(autoRefreshInterval);
   } else {
-    autoRefreshInterval = setInterval(autoRefresh, REFRESH_DELAY);
+    startAutoRefresh();
     autoRefresh(); // Immediate refresh when returning to tab
   }
 });

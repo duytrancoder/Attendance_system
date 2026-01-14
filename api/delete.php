@@ -21,17 +21,37 @@ file_put_contents($logFile, $logEntry, FILE_APPEND);
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['id'])) {
     $fingerprintId = (int)$_GET['id'];
     
+    // Validate fingerprint_id
+    if ($fingerprintId < 1 || $fingerprintId > 127) {
+        echo json_encode(['status' => 'ERROR', 'message' => 'ID khong hop le']);
+        exit();
+    }
+    
     try {
-        // Log the delete request
         error_log("Arduino DELETE request: fingerprint_id = $fingerprintId");
         
-        // IMPORTANT: Delete attendance records first (no CASCADE in current schema)
+        // Check if employee exists and is not already deleted
+        $checkStmt = $pdo->prepare("SELECT id, full_name, deleted_at FROM employees WHERE fingerprint_id = ?");
+        $checkStmt->execute([$fingerprintId]);
+        $employee = $checkStmt->fetch();
+        
+        if (!$employee) {
+            error_log("Employee with fingerprint_id = $fingerprintId not found");
+            echo json_encode(['status' => 'OK', 'message' => 'Khong tim thay (co the da xoa)']);
+            exit();
+        }
+        
+        if ($employee['deleted_at'] !== null) {
+            error_log("Employee already soft-deleted, performing hard delete");
+        }
+        
+        // HARD DELETE: Delete attendance records first
         $stmtAtt = $pdo->prepare("DELETE FROM attendance WHERE fingerprint_id = ?");
         $stmtAtt->execute([$fingerprintId]);
         $attendanceDeleted = $stmtAtt->rowCount();
         error_log("Deleted $attendanceDeleted attendance records for fingerprint_id = $fingerprintId");
         
-        // Then delete employee
+        // Then delete employee (hard delete)
         $stmt = $pdo->prepare("DELETE FROM employees WHERE fingerprint_id = ?");
         $stmt->execute([$fingerprintId]);
         
@@ -51,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['id'])) {
         error_log("Error deleting employee: " . $e->getMessage());
         echo json_encode(['status' => 'ERROR', 'message' => 'Loi: ' . $e->getMessage()]);
     }
+    exit();
 }
 
 // === HANDLE DELETE ALL (GET with all=true) ===
@@ -67,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['all']) && $_GET['all'] 
             exit();
         }
         
-        // Lấy danh sách employees theo dept (device_code -> department name mapping)
+        // Get department name from device_code
         $deptName = '';
         $jsonFile = __DIR__ . '/departments.json';
         
@@ -92,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['all']) && $_GET['all'] 
             exit();
         }
         
-        // Tìm department name từ device_code (CASE-INSENSITIVE)
+        // Find department name from device_code (CASE-INSENSITIVE)
         foreach ($depts as $d) {
             if (isset($d['device_code']) && strcasecmp($d['device_code'], $dept) === 0) {
                 $deptName = $d['name'];
@@ -101,22 +122,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['all']) && $_GET['all'] 
             }
         }
         
-        // Nếu không tìm thấy mapping -> BÁO LỖI rõ ràng
+        // If no mapping found, try direct match
         if (empty($deptName)) {
             error_log("ERROR: No department mapping found for device_code: $dept");
-            error_log("Available departments: " . json_encode($depts));
             
-            // Thử tìm xem có nhân viên nào có department = device_code không
-            $checkStmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM employees WHERE department = ?");
+            $checkStmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM employees WHERE department = ? AND deleted_at IS NULL");
             $checkStmt->execute([$dept]);
             $directMatch = $checkStmt->fetch()['cnt'];
             
             if ($directMatch > 0) {
-                // Có nhân viên với department = device_code -> Dùng trực tiếp
                 $deptName = $dept;
                 error_log("WARNING: Using device_code as department name (found $directMatch employees)");
             } else {
-                // Không tìm thấy gì -> Lỗi
                 echo json_encode([
                     'status' => 'ERROR', 
                     'message' => "Khong tim thay phong ban voi ma: $dept",
@@ -129,8 +146,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['all']) && $_GET['all'] 
         
         error_log("Deleting all employees from department: '$deptName' (device_code: '$dept')");
         
-        // Đếm số nhân viên trước khi xóa
-        $countStmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM employees WHERE department = ?");
+        // Count employees before delete (exclude already soft-deleted)
+        $countStmt = $pdo->prepare("SELECT COUNT(*) as cnt FROM employees WHERE department = ? AND deleted_at IS NULL");
         $countStmt->execute([$deptName]);
         $beforeCount = $countStmt->fetch()['cnt'];
         error_log("Found $beforeCount employees to delete");
@@ -147,18 +164,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['all']) && $_GET['all'] 
             exit();
         }
         
-        // Bước 1: Xóa attendance records
+        // HARD DELETE: Delete attendance records first
         $stmtAtt = $pdo->prepare("
             DELETE a FROM attendance a
             INNER JOIN employees e ON a.fingerprint_id = e.fingerprint_id
-            WHERE e.department = ?
+            WHERE e.department = ? AND e.deleted_at IS NULL
         ");
         $stmtAtt->execute([$deptName]);
         $attendanceDeleted = $stmtAtt->rowCount();
         error_log("Deleted $attendanceDeleted attendance records");
         
-        // Bước 2: Xóa employees
-        $stmtEmp = $pdo->prepare("DELETE FROM employees WHERE department = ?");
+        // Then delete employees (hard delete)
+        $stmtEmp = $pdo->prepare("DELETE FROM employees WHERE department = ? AND deleted_at IS NULL");
         $stmtEmp->execute([$deptName]);
         $employeesDeleted = $stmtEmp->rowCount();
         error_log("Deleted $employeesDeleted employees");
@@ -188,7 +205,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['all']) && $_GET['all'] 
 
 // === HANDLE WEB DELETE (POST with employee database id) ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'DELETE') {
-    // Handle both POST and DELETE methods
     $input = file_get_contents('php://input');
     
     // Try JSON first, then form-encoded
@@ -208,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'DEL
     }
     
     // Get employee details (fingerprint_id and department)
-    $stmt = $pdo->prepare("SELECT fingerprint_id, department FROM employees WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT fingerprint_id, department, full_name, deleted_at FROM employees WHERE id = ?");
     $stmt->execute([$employeeId]);
     $employee = $stmt->fetch();
     
@@ -217,10 +233,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'DEL
         exit();
     }
     
+    // Check if already soft-deleted
+    if ($employee['deleted_at'] !== null) {
+        echo json_encode(['status' => 'warning', 'message' => 'Nhân viên đã được đánh dấu xóa, đang chờ thiết bị xác nhận']);
+        exit();
+    }
+    
     $fingerId = $employee['fingerprint_id'];
     $deptName = $employee['department'];
     
-    // CRITICAL: Convert department NAME to device_code (CASE-INSENSITIVE)
+    // Convert department NAME to device_code (CASE-INSENSITIVE)
     $deviceCode = '';
     $jsonFile = __DIR__ . '/departments.json';
     if (file_exists($jsonFile)) {
@@ -238,27 +260,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'DEL
         $deviceCode = $deptName;
     }
     
+    // Generate unique request ID
+    $requestId = uniqid('del_', true);
+    
+    // STEP 1: SOFT DELETE - Mark as deleted immediately
+    $softDeleteStmt = $pdo->prepare("UPDATE employees SET deleted_at = NOW() WHERE id = ?");
+    $softDeleteStmt->execute([$employeeId]);
+    
+    error_log("Soft-deleted employee ID $employeeId (fingerprint_id: $fingerId, name: {$employee['full_name']})");
+    
+    // STEP 2: Create delete command in queue
     // Check if command already exists (prevent duplicates)
     $check = $pdo->prepare("SELECT id FROM device_commands WHERE device_dept = ? AND data = ? AND status = 'pending'");
     $check->execute([$deviceCode, $fingerId]);
     
     if ($check->rowCount() > 0) {
-        echo json_encode(['status' => 'warning', 'message' => 'Lệnh xóa đang chờ ESP32 xử lý...']);
+        echo json_encode([
+            'status' => 'success', 
+            'message' => 'Đã đánh dấu xóa. Lệnh xóa đang chờ ESP32 xử lý...',
+            'soft_deleted' => true
+        ]);
         exit();
     }
     
     // Create new delete command in queue using device_code
-    $sql = "INSERT INTO device_commands (device_dept, command, data, status) VALUES (?, 'DELETE', ?, 'pending')";
+    $sql = "INSERT INTO device_commands (device_dept, command, data, status, request_id) VALUES (?, 'DELETE', ?, 'pending', ?)";
     $stmt = $pdo->prepare($sql);
     
-    if ($stmt->execute([$deviceCode, $fingerId])) {
+    if ($stmt->execute([$deviceCode, $fingerId, $requestId])) {
         echo json_encode([
             'status' => 'success', 
-            'message' => 'Đã gửi lệnh xóa xuống thiết bị. Vui lòng chờ đồng bộ...',
+            'message' => 'Đã đánh dấu xóa và gửi lệnh xuống thiết bị. Nhân viên sẽ biến mất sau khi thiết bị xác nhận (5-10 giây).',
             'fingerprint_id' => $fingerId,
-            'device_code' => $deviceCode
+            'device_code' => $deviceCode,
+            'request_id' => $requestId,
+            'soft_deleted' => true
         ]);
     } else {
+        // Rollback soft delete if command creation failed
+        $rollbackStmt = $pdo->prepare("UPDATE employees SET deleted_at = NULL WHERE id = ?");
+        $rollbackStmt->execute([$employeeId]);
+        
         echo json_encode(['status' => 'error', 'message' => 'Lỗi database khi tạo lệnh']);
     }
 } else {

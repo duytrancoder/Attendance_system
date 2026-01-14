@@ -8,8 +8,8 @@ $pdo = db();
 // Today's date for attendance snapshot.
 $today = (new DateTime('today'))->format('Y-m-d');
 
-// Totals
-$totalEmployees = (int) $pdo->query('SELECT COUNT(*) FROM employees')->fetchColumn();
+// ✅ FIX: Only count active employees (exclude soft-deleted)
+$totalEmployees = (int) $pdo->query('SELECT COUNT(*) FROM employees WHERE deleted_at IS NULL')->fetchColumn();
 
 $stmtPresent = $pdo->prepare('SELECT COUNT(DISTINCT fingerprint_id) FROM attendance WHERE date = :d');
 $stmtPresent->execute(['d' => $today]);
@@ -38,7 +38,7 @@ $stmt = $pdo->prepare(
     FROM attendance a
     JOIN employees e ON e.fingerprint_id = a.fingerprint_id
     LEFT JOIN shifts s ON s.id = a.shift_id
-    WHERE a.date = :d
+    WHERE a.date = :d AND e.deleted_at IS NULL
     ORDER BY a.check_in ASC'
 );
 $stmt->execute(['d' => $today]);

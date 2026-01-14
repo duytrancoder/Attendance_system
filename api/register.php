@@ -23,18 +23,50 @@ if ($stmt->fetch()) {
     $tempName = "Nhân viên mới #" . $fingerId;
     $deptCode = isset($_GET['dept']) ? $_GET['dept'] : 'Chờ cập nhật';
     
-    // CRITICAL: Map device_code to department NAME
+    // CRITICAL: Map device_code to department NAME and validate
     $deptName = $deptCode; // Default to code if not found
     if ($deptCode !== 'Chờ cập nhật') {
         $jsonFile = __DIR__ . '/departments.json';
-        if (file_exists($jsonFile)) {
-            $depts = json_decode(file_get_contents($jsonFile), true) ?: [];
-            foreach ($depts as $d) {
-                if (isset($d['device_code']) && strcasecmp($d['device_code'], $deptCode) === 0) {
-                    $deptName = $d['name'];
-                    break;
-                }
+        
+        // Validate department file exists
+        if (!file_exists($jsonFile)) {
+            error_log("ERROR: departments.json not found at: $jsonFile");
+            json_response(['error' => 'File cấu hình phòng ban không tồn tại'], 500);
+        }
+        
+        $jsonContent = file_get_contents($jsonFile);
+        $depts = json_decode($jsonContent, true);
+        
+        // Validate JSON format
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("ERROR: Invalid JSON in departments.json: " . json_last_error_msg());
+            json_response(['error' => 'File cấu hình phòng ban bị lỗi'], 500);
+        }
+        
+        if (empty($depts) || !is_array($depts)) {
+            error_log("ERROR: departments.json is empty or invalid");
+            json_response(['error' => 'Danh sách phòng ban trống'], 500);
+        }
+        
+        // Find and validate department code
+        $validDept = false;
+        foreach ($depts as $d) {
+            if (isset($d['device_code']) && strcasecmp($d['device_code'], $deptCode) === 0) {
+                $deptName = $d['name'];
+                $validDept = true;
+                error_log("Validated department: device_code='$deptCode' -> name='$deptName'");
+                break;
             }
+        }
+        
+        // Reject if department code not found
+        if (!$validDept) {
+            error_log("ERROR: Invalid department code: $deptCode");
+            $availableCodes = array_column($depts, 'device_code');
+            json_response([
+                'error' => 'Mã phòng ban không hợp lệ: ' . $deptCode,
+                'available_codes' => $availableCodes
+            ], 400);
         }
     }
     

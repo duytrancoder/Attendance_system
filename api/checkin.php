@@ -9,11 +9,21 @@ if (!isset($_GET['finger_id'])) {
     json_response(['error' => 'Missing ID'], 400);
 }
 $fid = (int)$_GET['finger_id'];
+
+// Validate fingerprint_id range (AS608 supports 1-127 or 1-999 depending on model)
+if ($fid < 1 || $fid > 127) {
+    json_response([
+        'status' => 'ERROR',
+        'message' => 'ID van tay khong hop le (1-127)',
+        'name' => 'Unknown'
+    ]);
+}
+
 $today = date('Y-m-d');
 $now = date('H:i:s');
 
-// 2. Tìm tên nhân viên
-$stmt = $pdo->prepare("SELECT full_name FROM employees WHERE fingerprint_id = ?");
+// 2. Tìm tên nhân viên (exclude soft-deleted)
+$stmt = $pdo->prepare("SELECT full_name FROM employees WHERE fingerprint_id = ? AND deleted_at IS NULL");
 $stmt->execute([$fid]);
 $user = $stmt->fetch();
 
